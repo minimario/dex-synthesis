@@ -1,0 +1,8 @@
+### Starting build.
+# Target: synthesizer.ml.depends, tags: { package(core), extension:ml, file:synthesizer.ml, ocaml, ocamldep, quiet, thread, traverse }
+ocamlfind ocamldep -package core -modules synthesizer.ml > synthesizer.ml.depends
+# Target: synthesizer.cmo, tags: { package(core), byte, compile, extension:cmo, extension:ml, file:synthesizer.cmo, file:synthesizer.ml, implem, ocaml, quiet, thread, traverse }
+ocamlfind ocamlc -c -thread -package core -o synthesizer.cmo synthesizer.ml
+# Target: synthesizer.byte, tags: { package(core), byte, dont_link_with, extension:byte, file:synthesizer.byte, link, ocaml, program, quiet, thread, traverse }
+ocamlfind ocamlc -linkpkg -thread -package core synthesizer.cmo -o synthesizer.byte
+# Compilation successful.
