@@ -19,11 +19,12 @@ type expr =
 | Dot of expr * var
 | Sum of expr
 | For of var * expr
+
 let rec expr_to_string = function 
   | Var v -> v
   | Dot (e, v) -> (expr_to_string e) ^ "." ^ v
   | Sum expr -> "sum (" ^ (expr_to_string expr) ^ ")"
-  | For (v, e) -> ("for " ^ v ^ ". " ^ (expr_to_string e))
+  | For (v, e) -> "(for " ^ v ^ "." ^ (expr_to_string e) ^ ")"
 
 let rec type_to_string = function
 | VarType v -> v
@@ -55,8 +56,8 @@ let rec typecheck expr ctx = match expr with
 | Sum e -> 
   let (t, ctx') = typecheck e ctx in
   let restype = match t with 
-  | ArrowType (_, t2) -> t2
-  | VarType _ | Error -> Error
+  | ArrowType (VarType v1, VarType v2) -> VarType v2
+  | ArrowType _ | VarType _ | Error -> Error
   in
   if equal_dextype restype Error then (Error, Map.empty (module String)) else (restype, ctx')
 
@@ -83,40 +84,30 @@ let rec gen_exprs depth indices =
     all_exprs
   )
 
-let sample_expr = For ("k", For ("i", For ("j", Dot (Dot (Dot (Var "xs", "j"), "k"), "i"))))
-let input_type = ArrowType (VarType "n", ArrowType (VarType "m", ArrowType (VarType "p", VarType "v")))
-let output_type = ArrowType (VarType "m", ArrowType (VarType "n", ArrowType (VarType "p", VarType "v")))
+(* let sample_expr' = For ("x9", For ("x8", For ("x7", For ("x4", Dot (Dot (Dot (Dot (Var "xs", "x4"), "x9"), "x8"), "x7"))))) *)
+(* let sample_expr = For ("k", For ("i", For ("j", Dot (Dot (Dot (Var "xs", "j"), "k"), "i")))) *)
+
+(* transpose *)
+let input_type_1 = ArrowType (VarType "m", ArrowType (VarType "n", VarType "v"))
+let output_type_1 = ArrowType (VarType "n", ArrowType (VarType "m", VarType "v"))
+let ctx_1 = String.Map.singleton "xs" input_type_1
+
+
+let input_type_2 = ArrowType (VarType "n", ArrowType (VarType "m", ArrowType (VarType "p", VarType "v")))
 let output_type_2 = ArrowType (VarType "m", ArrowType (VarType "n", ArrowType (VarType "p", VarType "v")))
+let ctx_2 = String.Map.singleton "xs" input_type_2
 
-let _ =  print_string (string_of_bool (equal_dextype output_type output_type_2))
-
-(* let sample_expr = (Sum (For ("i", Dot (Var "xs", "i")))) *)
-(* let (t, ctx) = typecheck sample_expr (String.Map.singleton "xs" input_type) *)
+let input_type_3 = ArrowType (VarType "n", ArrowType (VarType "m", VarType "v"))
+let output_type_3 = VarType "v"
+let ctx_3 = String.Map.singleton "xs" input_type_1
 
 let depth = 10
 let exprs = List.init ~f:(fun i -> gen_exprs (i+1) []) (depth-1) |> List.concat
-(* let exprs = gen_exprs 1 [] *)
-
-let expr_types = List.map ~f:(fun expr -> typecheck expr (String.Map.singleton "xs" output_type)) exprs
 let _ = 
   List.iter ~f:(fun expr -> 
-    let (t, _) = typecheck expr (String.Map.singleton "xs" input_type) in
-
-    (* let _ = print_string ((expr_to_string expr) ^ "\n") in *)
-    (* let _ = print_string (type_to_string output_type ^ "\n") in *)
-    (* let _ = print_string (type_to_string t ^ "\n") in *)
-    (* let _ = print_string (string_of_bool (String.equal (type_to_string t) (type_to_string output_type)) ^ "\n") in *)
-    (* let _ = print_string (string_of_bool (equal_dextype t output_type)) in *)
-
-    if (equal_dextype t output_type) then 
+    let (t, _) = typecheck expr ctx_1 in
+    if (equal_dextype t output_type_1) then 
       (print_string (expr_to_string expr ^ " " ^ type_to_string t ^ "\n")) 
     else ();
   ) exprs
 
-(* let _ = 
-  print_string ((expr_to_string sample_expr) ^ "\n");
-  print_string ((type_to_string t) ^ "\n");
-  print_ctx ctx *)
-
-(* let _ = print_string ((expr_to_string sample_expr) ^ "\n") *)
-(* let _ = print_string ((type_to_string sample_type) ^ "\n") *)
