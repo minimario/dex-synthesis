@@ -19,12 +19,14 @@ type expr =
 | Dot of expr * var
 | Sum of expr
 | For of var * expr
+| BinProd of expr * expr
 
 let rec expr_to_string = function 
   | Var v -> v
   | Dot (e, v) -> (expr_to_string e) ^ "." ^ v
   | Sum expr -> "sum (" ^ (expr_to_string expr) ^ ")"
   | For (v, e) -> "(for " ^ v ^ "." ^ (expr_to_string e) ^ ")"
+  | BinProd (e1, e2) -> "(" ^ (expr_to_string e1) ^ ")" ^ "*" ^ "(" ^ (expr_to_string e2) ^ ")"
 
 let rec type_to_string = function
 | VarType v -> v
@@ -60,28 +62,39 @@ let rec typecheck expr ctx = match expr with
   | ArrowType _ | VarType _ | Error -> Error
   in
   if equal_dextype restype Error then (Error, Map.empty (module String)) else (restype, ctx')
+| BinProd (e1, e2) ->
+  let (t1, ctx1) = typecheck e1 ctx in
+  let (t2, ctx2) = typecheck e2 ctx in
+  let ctx' = Map.merge_skewed ctx1 ctx2 ~combine:(fun ~key v1 v2 -> v1) in
+  match t1, t2 with
+  | (VarType v1, VarType v2) when equal_string v1 v2 -> (VarType v1, ctx')
+  | _ -> (Error, Map.empty (module String))
 
-let rec gen_exprs depth indices = 
-  if depth = 1 then if List.length indices = 0 then [Var "xs"] else []
+let rec gen_exprs ctx inputs depth indices = 
+  if depth = 1 then if List.length indices = 0 then inputs else []
   else(
     
-    let prev_exprs = gen_exprs (depth - 1) indices in
+    let prev_exprs = gen_exprs ctx inputs (depth - 1) indices in
     let sum_exprs = List.map ~f:(fun expr -> Sum expr) prev_exprs in
 
     let dot_exprs = 
       List.map ~f:(fun ivar -> 
         List.map ~f:(fun expr -> Dot (expr, ivar))
-          (gen_exprs (depth - 1) (List.filter ~f:(fun x -> not (equal_string x ivar)) indices))
+          (gen_exprs ctx inputs (depth - 1) (List.filter ~f:(fun x -> not (equal_string x ivar)) indices))
       ) indices |> List.concat in
     (* let dot_exprs = List.map ~f:(fun expr -> List.map ~f:(fun ivar -> Dot (expr, ivar)) indices) prev_exprs |> List.concat in *)
     let varname = "x" ^ string_of_int depth in
 
-    let prev_exprs_with_var = gen_exprs (depth - 1) (varname::indices) in
+    let prev_exprs_with_var = gen_exprs ctx inputs (depth - 1) (varname::indices) in
     let for_exprs = List.map ~f:(fun expr -> For (varname, expr)) prev_exprs_with_var in
 
-    let all_exprs = List.concat [sum_exprs; dot_exprs; for_exprs] in
+    let prod_exprs = List.map ~f:(fun expr -> 
+      List.map ~f:(fun expr' -> 
+        BinProd (expr, expr')) prev_exprs) prev_exprs |> List.concat in
 
-    all_exprs
+    let all_exprs = List.concat [sum_exprs; dot_exprs; for_exprs; prod_exprs] in
+
+    List.filter ~f:(fun expr -> typecheck expr ctx |> fst |> equal_dextype Error |> not) all_exprs
   )
 
 (* let sample_expr' = For ("x9", For ("x8", For ("x7", For ("x4", Dot (Dot (Dot (Dot (Var "xs", "x4"), "x9"), "x8"), "x7"))))) *)
@@ -92,20 +105,33 @@ let input_type_1 = ArrowType (VarType "m", ArrowType (VarType "n", VarType "v"))
 let output_type_1 = ArrowType (VarType "n", ArrowType (VarType "m", VarType "v"))
 let ctx_1 = String.Map.singleton "xs" input_type_1
 
-
+(* transpose first 2 dimensions of a 3d array *)
 let input_type_2 = ArrowType (VarType "n", ArrowType (VarType "m", ArrowType (VarType "p", VarType "v")))
 let output_type_2 = ArrowType (VarType "m", ArrowType (VarType "n", ArrowType (VarType "p", VarType "v")))
 let ctx_2 = String.Map.singleton "xs" input_type_2
 
+(* 2d matrix sum *)
 let input_type_3 = ArrowType (VarType "n", ArrowType (VarType "m", VarType "v"))
 let output_type_3 = VarType "v"
-let ctx_3 = String.Map.singleton "xs" input_type_1
-let depth = 10
-let exprs = List.init ~f:(fun i -> gen_exprs (i+1) []) (depth-1) |> List.concat
+let ctx_3 = String.Map.singleton "xs" input_type_3
+
+(* dot product *)
+let input_1_type_4 = ArrowType (VarType "n", VarType "v")
+let input_2_type_4 = ArrowType (VarType "n", VarType "v")
+let output_type_4 = VarType "v"
+let ctx_4 = String.Map.of_alist_exn [("x", input_1_type_4); ("y", input_2_type_4)]
+
+(* let input_1_type_4 = ArrowType (VarType "n", ArrowType (VarType "m", VarType "v"))
+let input_2_type_4 = ArrowType (VarType "m", ArrowType (VarType "p", VarType "v"))
+let output_type_4 = ArrowType (VarType "n", ArrowType (VarType "p", VarType "v"))
+let ctx_4 = String.Map.of_alist_exn [("x", input_1_type_4); ("y", input_2_type_4)] *)
+
+let depth = 6
+let exprs = List.init ~f:(fun i -> gen_exprs ctx_4 [Var "x"; Var "y"] (i+1) []) (depth-1) |> List.concat
 let _ = 
   List.iter ~f:(fun expr -> 
-    let (t, _) = typecheck expr ctx_1 in
-    if (equal_dextype t output_type_1) then 
+    let (t, _) = typecheck expr ctx_4 in
+    if (equal_dextype t output_type_4) then 
       (print_string (expr_to_string expr ^ " " ^ type_to_string t ^ "\n")) 
     else ();
   ) exprs
