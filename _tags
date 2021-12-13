@@ -1,1 +1,1 @@
-true: package(core)
+true: package(core),package(pyml)
